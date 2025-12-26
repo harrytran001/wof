@@ -5,12 +5,18 @@ export type Player = {
   createdAt: number;
 };
 
+export type QuestionSet = {
+  id: string;
+  name: string;
+  createdAt: number;
+};
+
 export type WordEntry = {
   id: string;
   text: string;
   theme: string;
+  setId: string;
   order: number;
-  used: boolean;
   createdAt: number;
 };
 
@@ -27,7 +33,9 @@ export type AppStateV1 = {
   version: 1;
   players: Player[];
   activePlayerId?: string;
+  sets: QuestionSet[];
   words: WordEntry[];
+  activeSetId?: string; // which set is selected for editing/playing
   gameStatus: GameStatus;
   currentPuzzleIndex: number;
   puzzles: PuzzleState[]; // one per word when game starts

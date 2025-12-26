@@ -11,6 +11,8 @@ type Props = {
   puzzles: PuzzleState[];
   currentPuzzleIndex: number;
   gameStatus: GameStatus;
+  showIntro: boolean;
+  onDismissIntro: () => void;
   onGuessLetter: (letter: string) => LetterGuessResult;
   onSolvePuzzle: () => void;
   onNextPuzzle: () => void;
@@ -28,12 +30,28 @@ type GuessFeedback = {
   timestamp: number;
 };
 
+// Generate confetti pieces
+function generateConfetti(count: number) {
+  const colors = ["#7c3aed", "#22c55e", "#f59e0b", "#ef4444", "#3b82f6", "#ec4899", "#14b8a6"];
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    color: colors[i % colors.length],
+    left: Math.random() * 100,
+    delay: Math.random() * 3,
+    duration: 3 + Math.random() * 2,
+    size: 8 + Math.random() * 8,
+    rotation: Math.random() * 360,
+  }));
+}
+
 export function GameView({
   players,
   words,
   puzzles,
   currentPuzzleIndex,
   gameStatus,
+  showIntro,
+  onDismissIntro,
   onGuessLetter,
   onSolvePuzzle,
   onNextPuzzle,
@@ -49,6 +67,7 @@ export function GameView({
   const [playerDraft, setPlayerDraft] = React.useState("");
   const [wrongSolve, setWrongSolve] = React.useState(false);
   const [feedback, setFeedback] = React.useState<GuessFeedback | null>(null);
+  const [confetti] = React.useState(() => generateConfetti(50));
 
   const currentPuzzle = puzzles[currentPuzzleIndex];
   const currentWord = currentPuzzle ? words.find((w) => w.id === currentPuzzle.wordId) : undefined;
@@ -201,6 +220,41 @@ export function GameView({
     );
   };
 
+  // Intro Screen with Confetti (only when game is playing and intro hasn't been dismissed)
+  if (showIntro && gameStatus === "playing") {
+    return (
+      <div className="introOverlay">
+        <div className="confettiContainer">
+          {confetti.map((piece) => (
+            <div
+              key={piece.id}
+              className="confettiPiece"
+              style={{
+                left: `${piece.left}%`,
+                backgroundColor: piece.color,
+                width: piece.size,
+                height: piece.size,
+                animationDelay: `${piece.delay}s`,
+                animationDuration: `${piece.duration}s`,
+                transform: `rotate(${piece.rotation}deg)`,
+              }}
+            />
+          ))}
+        </div>
+        <div className="introContent">
+          <div className="introWheel">🎡</div>
+          <h1 className="introTitle">Wheel of Fortune</h1>
+          <div className="introSubtitle">for</div>
+          <h2 className="introName">Tyrus</h2>
+          <p className="introTagline">✨ Let the games begin! ✨</p>
+          <button className="btn btnPrimary btnLarge introStart" onClick={onDismissIntro}>
+            Start Playing →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (gameStatus === "setup") {
     return (
       <div className="gameLayout">
@@ -216,11 +270,6 @@ export function GameView({
   if (gameStatus === "ended" || puzzles.length === 0) {
     return (
       <div className="gameLayout">
-        <Card title="Game Ended">
-          <p className="muted" style={{ textAlign: "center", padding: 40 }}>
-            Game has ended. Go to <strong>Admin</strong> tab to start a new game.
-          </p>
-        </Card>
         <Card title="Final Scores">
           <div className="finalScores">
             {players

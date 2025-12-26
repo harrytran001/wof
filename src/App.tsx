@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as XLSX from "xlsx";
 import { defaultState } from "./state/defaultState";
-import type { AppStateV1, Player, WordEntry, PuzzleState } from "./state/types";
+import type { AppStateV1, Player, WordEntry, PuzzleState, QuestionSet } from "./state/types";
 import { usePersistedState } from "./state/usePersistedState";
 import { id } from "./lib/ids";
 import { AdminView } from "./components/AdminView";
@@ -9,11 +9,11 @@ import { GameView } from "./components/GameView";
 
 type Tab = "game" | "admin";
 
-const STORAGE_KEY = "wof_state_v1";
+const STORAGE_KEY = "wof_state_v2";
 
 function migrateToV1(raw: unknown): AppStateV1 {
   const asAny = raw as Partial<AppStateV1> | null;
-  if (!asAny || asAny.version !== 1) return defaultState;
+  if (!asAny) return defaultState;
   
   // Migrate puzzles to include wrongLetters if missing
   const puzzles = Array.isArray(asAny.puzzles) 
@@ -23,19 +23,43 @@ function migrateToV1(raw: unknown): AppStateV1 {
       }))
     : [];
   
-  // Migrate words to include theme if missing
-  const words = Array.isArray(asAny.words)
-    ? asAny.words.map((w) => ({
-        ...w,
-        theme: w.theme ?? "",
-      }))
-    : [];
+  // Handle sets migration
+  let sets = Array.isArray(asAny.sets) ? asAny.sets : [];
+  let activeSetId = asAny.activeSetId;
+  
+  // Migrate words - ensure they have setId
+  let words = Array.isArray(asAny.words) ? asAny.words : [];
+  
+  // If there are words without setId, create a default set for them
+  const wordsWithoutSet = words.filter((w) => !w.setId);
+  if (wordsWithoutSet.length > 0 && sets.length === 0) {
+    const defaultSet: QuestionSet = {
+      id: id("s"),
+      name: "Default Set",
+      createdAt: Date.now(),
+    };
+    sets = [defaultSet];
+    activeSetId = defaultSet.id;
+    words = words.map((w) => ({
+      ...w,
+      theme: w.theme ?? "",
+      setId: w.setId ?? defaultSet.id,
+    }));
+  } else {
+    words = words.map((w) => ({
+      ...w,
+      theme: w.theme ?? "",
+      setId: w.setId ?? (sets[0]?.id || ""),
+    }));
+  }
   
   return {
     ...defaultState,
     ...asAny,
     players: Array.isArray(asAny.players) ? asAny.players : [],
+    sets,
     words,
+    activeSetId,
     puzzles,
     gameStatus: asAny.gameStatus ?? "setup",
     currentPuzzleIndex: asAny.currentPuzzleIndex ?? 0,
@@ -44,6 +68,7 @@ function migrateToV1(raw: unknown): AppStateV1 {
 
 export function App() {
   const [tab, setTab] = React.useState<Tab>("admin");
+  const [showIntro, setShowIntro] = React.useState(false);
   const [state, setState] = usePersistedState<AppStateV1>({
     key: STORAGE_KEY,
     defaultValue: defaultState,
@@ -71,16 +96,47 @@ export function App() {
     }));
   };
 
+  // Set actions
+  const createSet = (name: string) => {
+    update((s) => {
+      const newSet: QuestionSet = { id: id("s"), name, createdAt: Date.now() };
+      return { 
+        ...s, 
+        sets: [...s.sets, newSet],
+        activeSetId: s.activeSetId ?? newSet.id, // Select if first set
+      };
+    });
+  };
+
+  const deleteSet = (setId: string) => {
+    update((s) => {
+      // Remove set and all its words
+      const newSets = s.sets.filter((set) => set.id !== setId);
+      const newWords = s.words.filter((w) => w.setId !== setId);
+      const newActiveSetId = s.activeSetId === setId ? newSets[0]?.id : s.activeSetId;
+      return { ...s, sets: newSets, words: newWords, activeSetId: newActiveSetId };
+    });
+  };
+
+  const selectSet = (setId: string) => {
+    update((s) => ({ ...s, activeSetId: setId }));
+  };
+
   // Word actions
   const addWord = (text: string, theme: string) => {
     update((s) => {
-      const maxOrder = s.words.reduce((max, w) => Math.max(max, w.order), 0);
+      if (!s.activeSetId) return s;
+      
+      // Get max order for this set
+      const setWords = s.words.filter((w) => w.setId === s.activeSetId);
+      const maxOrder = setWords.reduce((max, w) => Math.max(max, w.order), 0);
+      
       const entry: WordEntry = {
         id: id("w"),
         text,
         theme,
+        setId: s.activeSetId,
         order: maxOrder + 1,
-        used: false,
         createdAt: Date.now(),
       };
       return { ...s, words: [...s.words, entry] };
@@ -93,7 +149,12 @@ export function App() {
 
   const moveWord = (wordId: string, direction: "up" | "down") => {
     update((s) => {
-      const sorted = [...s.words].sort((a, b) => a.order - b.order);
+      // Only move within the same set
+      const word = s.words.find((w) => w.id === wordId);
+      if (!word) return s;
+      
+      const setWords = s.words.filter((w) => w.setId === word.setId);
+      const sorted = [...setWords].sort((a, b) => a.order - b.order);
       const idx = sorted.findIndex((w) => w.id === wordId);
       if (idx === -1) return s;
       
@@ -116,16 +177,16 @@ export function App() {
   };
 
   // Game actions
-  const startGame = () => {
+  const startGame = (setId: string) => {
     update((s) => {
-      // Use all unused words in order
-      const unusedWords = s.words
-        .filter((w) => !w.used)
+      // Use all words from the selected set in order
+      const setWords = s.words
+        .filter((w) => w.setId === setId)
         .sort((a, b) => a.order - b.order);
       
-      if (unusedWords.length === 0) return s;
+      if (setWords.length === 0) return s;
 
-      const newPuzzles: PuzzleState[] = unusedWords.map((w) => ({
+      const newPuzzles: PuzzleState[] = setWords.map((w) => ({
         wordId: w.id,
         revealedLetters: [],
         wrongLetters: [],
@@ -134,11 +195,13 @@ export function App() {
 
       return {
         ...s,
+        activeSetId: setId,
         gameStatus: "playing",
         currentPuzzleIndex: 0,
         puzzles: newPuzzles,
       };
     });
+    setShowIntro(true);
     setTab("game");
   };
 
@@ -208,12 +271,7 @@ export function App() {
       const newPuzzles = [...s.puzzles];
       newPuzzles[s.currentPuzzleIndex] = { ...puzzle, solved: true };
       
-      // Mark word as used
-      const newWords = s.words.map((w) =>
-        w.id === puzzle.wordId ? { ...w, used: true } : w
-      );
-      
-      return { ...s, puzzles: newPuzzles, words: newWords };
+      return { ...s, puzzles: newPuzzles };
     });
   };
 
@@ -239,30 +297,40 @@ export function App() {
   };
 
   const exportExcel = () => {
-    // Create workbook with two sheets: Words and Players
+    // Create workbook with sheets for each set
     const wb = XLSX.utils.book_new();
     
-    // Words sheet
-    const wordsData = [...state.words]
-      .sort((a, b) => a.order - b.order)
-      .map((w, idx) => ({
+    // Export each set as a separate sheet
+    state.sets.forEach((set) => {
+      const setWords = state.words
+        .filter((w) => w.setId === set.id)
+        .sort((a, b) => a.order - b.order);
+      
+      const wordsData = setWords.map((w, idx) => ({
         "Order": idx + 1,
         "Theme": w.theme || "",
         "Word/Phrase": w.text,
-        "Used": w.used ? "Yes" : "No",
       }));
-    const wordsSheet = XLSX.utils.json_to_sheet(wordsData);
-    wordsSheet["!cols"] = [{ wch: 8 }, { wch: 20 }, { wch: 40 }, { wch: 8 }];
-    XLSX.utils.book_append_sheet(wb, wordsSheet, "Words");
+      
+      if (wordsData.length > 0) {
+        const sheet = XLSX.utils.json_to_sheet(wordsData);
+        sheet["!cols"] = [{ wch: 8 }, { wch: 20 }, { wch: 40 }];
+        // Sanitize sheet name (Excel has restrictions)
+        const sheetName = set.name.slice(0, 31).replace(/[\\/*?[\]]/g, "-");
+        XLSX.utils.book_append_sheet(wb, sheet, sheetName);
+      }
+    });
     
     // Players sheet
     const playersData = state.players.map((p) => ({
       "Name": p.name,
       "Score": p.score,
     }));
-    const playersSheet = XLSX.utils.json_to_sheet(playersData);
-    playersSheet["!cols"] = [{ wch: 25 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, playersSheet, "Players");
+    if (playersData.length > 0) {
+      const playersSheet = XLSX.utils.json_to_sheet(playersData);
+      playersSheet["!cols"] = [{ wch: 25 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, playersSheet, "Players");
+    }
     
     // Download
     XLSX.writeFile(wb, "wheel-of-fortune.xlsx");
@@ -278,60 +346,64 @@ export function App() {
         // Helper to find column value with flexible naming
         const findCol = (row: Record<string, unknown>, ...names: string[]): string | undefined => {
           for (const name of names) {
-            // Try exact match first
             if (row[name] !== undefined) return String(row[name]);
-            // Try case-insensitive
             const key = Object.keys(row).find(k => k.toLowerCase() === name.toLowerCase());
             if (key && row[key] !== undefined) return String(row[key]);
           }
           return undefined;
         };
         
-        // Read Words sheet (or first sheet if "Words" doesn't exist)
-        const wordsSheet = wb.Sheets["Words"] || wb.Sheets[wb.SheetNames[0]];
+        const importedSets: QuestionSet[] = [];
         const importedWords: WordEntry[] = [];
-        
-        if (wordsSheet) {
-          const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wordsSheet);
-          rows.forEach((row, idx) => {
-            // Flexible column matching for word/phrase
-            const text = findCol(row, "Word/Phrase", "Word", "Phrase", "Text", "Answer")?.trim();
-            if (text) {
-              const orderVal = findCol(row, "Order", "#", "No", "Number");
-              const themeVal = findCol(row, "Theme", "Category", "Topic");
-              const usedVal = findCol(row, "Used", "Done", "Completed");
-              
-              importedWords.push({
-                id: id("w"),
-                text,
-                theme: themeVal?.trim() || "",
-                order: orderVal ? parseInt(orderVal, 10) : idx + 1,
-                used: usedVal?.toLowerCase() === "yes" || usedVal?.toLowerCase() === "true",
-                createdAt: Date.now(),
-              });
-            }
-          });
-        }
-        
-        // Read Players sheet
-        const playersSheet = wb.Sheets["Players"];
         const importedPlayers: Player[] = [];
         
-        if (playersSheet) {
-          const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(playersSheet);
-          rows.forEach((row) => {
-            const name = findCol(row, "Name", "Player")?.trim();
-            if (name) {
-              const scoreVal = findCol(row, "Score", "Points");
-              importedPlayers.push({
-                id: id("p"),
-                name,
-                score: scoreVal ? parseInt(scoreVal, 10) : 0,
-                createdAt: Date.now(),
-              });
-            }
-          });
-        }
+        // Each sheet (except "Players") becomes a set
+        wb.SheetNames.forEach((sheetName) => {
+          if (sheetName.toLowerCase() === "players") {
+            // Handle players sheet
+            const sheet = wb.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+            rows.forEach((row) => {
+              const name = findCol(row, "Name", "Player")?.trim();
+              if (name) {
+                const scoreVal = findCol(row, "Score", "Points");
+                importedPlayers.push({
+                  id: id("p"),
+                  name,
+                  score: scoreVal ? parseInt(scoreVal, 10) : 0,
+                  createdAt: Date.now(),
+                });
+              }
+            });
+          } else {
+            // Create a set from this sheet
+            const setObj: QuestionSet = {
+              id: id("s"),
+              name: sheetName,
+              createdAt: Date.now(),
+            };
+            importedSets.push(setObj);
+            
+            const sheet = wb.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+            rows.forEach((row, idx) => {
+              const text = findCol(row, "Word/Phrase", "Word", "Phrase", "Text", "Answer")?.trim();
+              if (text) {
+                const orderVal = findCol(row, "Order", "#", "No", "Number");
+                const themeVal = findCol(row, "Theme", "Category", "Topic");
+                
+                importedWords.push({
+                  id: id("w"),
+                  text,
+                  theme: themeVal?.trim() || "",
+                  setId: setObj.id,
+                  order: orderVal ? parseInt(orderVal, 10) : idx + 1,
+                  createdAt: Date.now(),
+                });
+              }
+            });
+          }
+        });
         
         if (importedWords.length === 0 && importedPlayers.length === 0) {
           window.alert("No valid data found in the Excel file.\n\nMake sure you have columns like 'Word' or 'Phrase' or 'Text'.");
@@ -339,13 +411,15 @@ export function App() {
         }
         
         const ok = window.confirm(
-          `Found ${importedWords.length} word(s) and ${importedPlayers.length} player(s).\n\nThis will replace current data. Continue?`
+          `Found ${importedSets.length} set(s) with ${importedWords.length} word(s) and ${importedPlayers.length} player(s).\n\nThis will replace current data. Continue?`
         );
         if (!ok) return;
         
         setState((prev) => ({
           ...prev,
+          sets: importedSets.length > 0 ? importedSets : prev.sets,
           words: importedWords.length > 0 ? importedWords : prev.words,
+          activeSetId: importedSets.length > 0 ? importedSets[0].id : prev.activeSetId,
           players: importedPlayers.length > 0 ? importedPlayers : prev.players,
         }));
       } catch {
@@ -369,9 +443,9 @@ export function App() {
                 Game in progress · Puzzle {state.currentPuzzleIndex + 1}/{totalPuzzles} · {solvedCount} solved
               </>
             ) : state.gameStatus === "ended" ? (
-              <>Game ended · {state.words.length} words in bank</>
+              <>Game ended · {state.sets.length} sets available</>
             ) : (
-              <>{state.words.length} words ready · {state.players.length} players</>
+              <>{state.sets.length} sets · {state.words.length} total words · {state.players.length} players</>
             )}
           </p>
         </div>
@@ -398,6 +472,8 @@ export function App() {
           puzzles={state.puzzles}
           currentPuzzleIndex={state.currentPuzzleIndex}
           gameStatus={state.gameStatus}
+          showIntro={showIntro}
+          onDismissIntro={() => setShowIntro(false)}
           onGuessLetter={guessLetter}
           onSolvePuzzle={solvePuzzle}
           onNextPuzzle={nextPuzzle}
@@ -409,8 +485,13 @@ export function App() {
         />
       ) : (
         <AdminView
-          words={state.words}
+          sets={state.sets}
+          activeSetId={state.activeSetId}
+          allWords={state.words}
           gameStatus={state.gameStatus}
+          onCreateSet={createSet}
+          onDeleteSet={deleteSet}
+          onSelectSet={selectSet}
           onAddWord={addWord}
           onDeleteWord={deleteWord}
           onMoveWord={moveWord}

@@ -717,6 +717,11 @@ select:focus {
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .sectionHeader h2 {
@@ -729,9 +734,8 @@ select:focus {
 .sectionTitle {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .sectionStats {
@@ -1050,6 +1054,292 @@ select:focus {
   margin-top: 16px;
   padding: 16px 20px;
   border-top: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+/* Question Sets */
+.setsList {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--panel2);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.setItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.setItem.active {
+  background: rgba(124, 58, 237, 0.15);
+  border-color: rgba(124, 58, 237, 0.4);
+}
+
+.setName {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.setCount {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.setItem .iconBtn {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.setItem:hover .iconBtn {
+  opacity: 1;
+}
+
+.iconBtn.small {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+
+.createSetArea {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.createSetArea input {
+  flex: 1;
+}
+
+.emptyState.small {
+  padding: 24px 16px;
+}
+
+.emptyState.small p {
+  font-size: 14px;
+}
+
+.emptyState.small span {
+  font-size: 12px;
+}
+
+/* Start Game List */
+.startGameList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.startSetBtn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+}
+
+.startSetName {
+  font-weight: 600;
+}
+
+.startSetCount {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Toggle Button for Answers */
+.toggleBtn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  color: #f87171;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toggleBtn:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.toggleBtn.active {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+}
+
+.toggleBtn.active:hover {
+  background: rgba(34, 197, 94, 0.25);
+}
+
+.wordText.masked {
+  font-family: ui-monospace, monospace;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+/* ========================================
+   INTRO SCREEN WITH CONFETTI
+   ======================================== */
+
+.introOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: 
+    radial-gradient(ellipse at 30% 20%, rgba(124, 58, 237, 0.4) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, rgba(34, 197, 94, 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(245, 158, 11, 0.2) 0%, transparent 60%),
+    var(--bg);
+  overflow: hidden;
+}
+
+.confettiContainer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confettiPiece {
+  position: absolute;
+  top: -20px;
+  border-radius: 2px;
+  animation: confettiFall linear infinite;
+}
+
+@keyframes confettiFall {
+  0% {
+    transform: translateY(-100px) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+.introContent {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  animation: introFadeIn 0.8s ease-out;
+}
+
+@keyframes introFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.introWheel {
+  font-size: 80px;
+  margin-bottom: 20px;
+  animation: wheelSpin 3s ease-in-out infinite;
+}
+
+@keyframes wheelSpin {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(15deg); }
+  75% { transform: rotate(-15deg); }
+}
+
+.introTitle {
+  font-size: 48px;
+  font-weight: 800;
+  margin: 0;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 4px 30px rgba(124, 58, 237, 0.3);
+  letter-spacing: -1px;
+}
+
+.introSubtitle {
+  font-size: 24px;
+  color: var(--muted);
+  margin: 16px 0 8px;
+  font-weight: 500;
+}
+
+.introName {
+  font-size: 72px;
+  font-weight: 900;
+  margin: 0;
+  background: linear-gradient(135deg, #22c55e 0%, #14b8a6 50%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  animation: nameGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes nameGlow {
+  0% {
+    filter: drop-shadow(0 0 20px rgba(34, 197, 94, 0.4));
+  }
+  100% {
+    filter: drop-shadow(0 0 40px rgba(34, 197, 94, 0.8));
+  }
+}
+
+.introTagline {
+  font-size: 20px;
+  color: var(--muted);
+  margin: 24px 0 32px;
+  letter-spacing: 2px;
+}
+
+.introStart {
+  padding: 18px 40px;
+  font-size: 18px;
+  animation: buttonPulse 2s ease-in-out infinite;
+}
+
+@keyframes buttonPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 15px rgba(124, 58, 237, 0);
+  }
+}
+
+@media (max-width: 600px) {
+  .introTitle {
+    font-size: 32px;
+  }
+  
+  .introName {
+    font-size: 48px;
+    letter-spacing: 2px;
+  }
+  
+  .introWheel {
+    font-size: 60px;
+  }
 }
 
 
