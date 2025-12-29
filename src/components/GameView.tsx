@@ -246,7 +246,7 @@ export function GameView({
           <h1 className="introTitle">Wheel of Fortune</h1>
           <div className="introSubtitle">for</div>
           <h2 className="introName">Tyrus</h2>
-          <p className="introTagline">✨ Let the games begin! ✨</p>
+          <p className="introTagline">✨ Let the game begin! ✨</p>
           <button className="btn btnPrimary btnLarge introStart" onClick={onDismissIntro}>
             Start Playing →
           </button>
